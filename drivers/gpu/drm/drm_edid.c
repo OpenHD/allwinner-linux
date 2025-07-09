@@ -35,6 +35,8 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/vga_switcheroo.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
 
 #include <drm/drm_displayid.h>
 #include <drm/drm_drv.h>
@@ -86,6 +88,8 @@
 #define EDID_QUIRK_FORCE_10BPC			(1 << 11)
 /* Non desktop display (i.e. HMD) */
 #define EDID_QUIRK_NON_DESKTOP			(1 << 12)
+
+#define CONNECTOR_QUIRK_PREFER_FHD		(1 << 14)
 
 struct detailed_mode_closure {
 	struct drm_connector *connector;
@@ -2153,6 +2157,26 @@ static u32 edid_get_quirks(const struct edid *edid)
 	return 0;
 }
 
+static u32 connector_get_quirks(struct drm_connector *connector)
+{
+	struct device_node *np = connector->dev->dev->of_node;
+	u32 quirks = 0;
+
+	if (!np)
+		return 0;
+
+	if (of_property_read_bool(np, "quirk-prefer-fhd"))
+		quirks |= CONNECTOR_QUIRK_PREFER_FHD;
+
+	if (of_property_read_bool(np, "quirk-prefer-large-60"))
+		quirks |= EDID_QUIRK_PREFER_LARGE_60;
+
+	if (of_property_read_bool(np, "quirk-prefer-large-75"))
+		quirks |= EDID_QUIRK_PREFER_LARGE_75;
+
+	return quirks;
+}
+
 #define MODE_SIZE(m) ((m)->hdisplay * (m)->vdisplay)
 #define MODE_REFRESH_DIFF(c,t) (abs((c) - (t)))
 
@@ -2187,6 +2211,14 @@ static void edid_fixup_preferred(struct drm_connector *connector,
 
 		if (cur_mode == preferred_mode)
 			continue;
+
+		if ((quirks & CONNECTOR_QUIRK_PREFER_FHD) &&
+			MODE_SIZE(cur_mode) > 1920 * 1080)
+			continue;
+
+		if ((quirks & CONNECTOR_QUIRK_PREFER_FHD) &&
+			MODE_SIZE(preferred_mode) > 1920 * 1080)
+			preferred_mode = cur_mode;
 
 		/* Largest mode is preferred */
 		if (MODE_SIZE(cur_mode) > MODE_SIZE(preferred_mode))
@@ -5181,7 +5213,7 @@ u32 drm_add_display_info(struct drm_connector *connector, const struct edid *edi
 {
 	struct drm_display_info *info = &connector->display_info;
 
-	u32 quirks = edid_get_quirks(edid);
+	u32 quirks = edid_get_quirks(edid) | connector_get_quirks(connector);
 
 	drm_reset_display_info(connector);
 
@@ -5404,7 +5436,7 @@ int drm_add_edid_modes(struct drm_connector *connector, struct edid *edid)
 	if (edid->features & DRM_EDID_FEATURE_DEFAULT_GTF)
 		num_modes += add_inferred_modes(connector, edid);
 
-	if (quirks & (EDID_QUIRK_PREFER_LARGE_60 | EDID_QUIRK_PREFER_LARGE_75))
+	if (quirks & (EDID_QUIRK_PREFER_LARGE_60 | EDID_QUIRK_PREFER_LARGE_75 | CONNECTOR_QUIRK_PREFER_FHD))
 		edid_fixup_preferred(connector, quirks);
 
 	if (quirks & EDID_QUIRK_FORCE_6BPC)
