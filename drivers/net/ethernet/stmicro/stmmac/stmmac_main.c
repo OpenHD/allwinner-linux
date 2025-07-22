@@ -68,6 +68,12 @@
 #define	YT8531C_EXTREG_LED1             0xA00D
 #define	YT8531C_EXTREG_LED2             0xA00E
 
+#define	MAE0621A_PHY_UID	0x7b744412
+#define	MAE0621A_PHY_UID_MASK	0x001fffff
+#define	MAE0621A_PAGE_SELECT	0x1f
+#define	MAE0621A_LCR_ADDR	0x10
+#define	MAE0621A_EEELCR_ADDR	0x11
+
 /* Module parameters */
 #define TX_TIMEO	5000
 static int watchdog = TX_TIMEO;
@@ -7067,6 +7073,33 @@ static int phy_yt8531c_led_fixup(struct phy_device *phydev)
 	return ret;
 }
 
+static int phy_mae0621a_led_fixup(struct phy_device *phydev)
+{
+	u32 val, val2;
+
+	/* Switch to Page 0x0d04 */
+	phy_write(phydev, MAE0621A_PAGE_SELECT, 0x0d04);
+
+	/* Set LED1(Green) Link 10/100/1000M + Active, and set LED2(Yellow) Link 10/100/1000M */
+	val = phy_read(phydev, MAE0621A_LCR_ADDR);
+	val |= (1<<5);
+	val |= (1<<8);
+	val |= (1<<10);
+	val |= (1<<11);
+	val &= (~(1<<14));
+	phy_write(phydev, MAE0621A_LCR_ADDR, val);
+
+	/* Disable LED2(Yellow) EEE LED function to keep it on when linked */
+	val2 = phy_read(phydev, MAE0621A_EEELCR_ADDR);
+	val2 &= (~(1<<3));
+	phy_write(phydev, MAE0621A_EEELCR_ADDR, val2);
+
+	/* Switch back to the PHY's IEEE Standard Registers. Here it is Page 0 */
+	phy_write(phydev, MAE0621A_PAGE_SELECT, 0);
+
+	return 0;
+}
+
 /**
  * stmmac_dvr_probe
  * @device: device pointer
@@ -7349,6 +7382,12 @@ int stmmac_dvr_probe(struct device *device,
 	ret = phy_register_fixup_for_uid(YT8531C_PHY_ID, YT8531C_PHY_ID_MASK, phy_yt8531c_led_fixup);
 	if (ret) {
 		dev_warn(priv->device, "Failed to register fixup for PHY YT8531C.\n");
+	}
+
+	/* Register fixup for PHY MAE0621A */
+	ret = phy_register_fixup_for_uid(MAE0621A_PHY_UID, MAE0621A_PHY_UID_MASK, phy_mae0621a_led_fixup);
+	if (ret) {
+		dev_warn(priv->device, "Failed to register fixup for PHY MAE0621A.\n");
 	}
 
 	return ret;
