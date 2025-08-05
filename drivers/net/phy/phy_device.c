@@ -228,6 +228,7 @@ static void phy_mdio_device_remove(struct mdio_device *mdiodev)
 }
 
 static struct phy_driver genphy_driver;
+static struct phy_driver genphy_driver_priv;
 
 static LIST_HEAD(phy_fixup_list);
 static DEFINE_MUTEX(phy_fixup_lock);
@@ -3232,6 +3233,16 @@ static struct phy_driver genphy_driver = {
 	.set_loopback   = genphy_loopback,
 };
 
+static struct phy_driver genphy_driver_priv = {
+	.phy_id		= 0xfffffffe,
+	.phy_id_mask	= 0xffffffff,
+	.name		= "Generic PHY (Private)",
+	.get_features	= genphy_read_abilities,
+	.suspend	= genphy_suspend,
+	.resume		= genphy_resume,
+	.set_loopback   = genphy_loopback,
+};
+
 static const struct ethtool_phy_ops phy_ethtool_phy_ops = {
 	.get_sset_count		= phy_ethtool_get_sset_count,
 	.get_strings		= phy_ethtool_get_strings,
@@ -3260,8 +3271,14 @@ static int __init phy_init(void)
 	if (rc)
 		goto err_c45;
 
+	rc = phy_driver_register(&genphy_driver_priv, THIS_MODULE);
+	if (rc)
+		goto err_c22;
+
 	return 0;
 
+err_c22:
+	phy_driver_unregister(&genphy_driver);
 err_c45:
 	phy_driver_unregister(&genphy_c45_driver);
 err_mdio_bus:
@@ -3276,6 +3293,7 @@ static void __exit phy_exit(void)
 {
 	phy_driver_unregister(&genphy_c45_driver);
 	phy_driver_unregister(&genphy_driver);
+	phy_driver_unregister(&genphy_driver_priv);
 	mdio_bus_exit();
 	ethtool_set_ethtool_phy_ops(NULL);
 }
