@@ -985,7 +985,7 @@ void pci_no_msi(void)
 {
 	pci_msi_enable = 0;
 }
-
+EXPORT_SYMBOL(pci_no_msi);
 /**
  * pci_msi_enabled - is MSI enabled?
  *
