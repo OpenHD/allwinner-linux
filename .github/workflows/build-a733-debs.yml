@@ -87,5 +87,5 @@ jobs:
 
           for deb in "${debs[@]}"; do
             echo "Uploading ${deb}"
-            cloudsmith push deb "openhd/${GITHUB_REF_NAME}/debian/bullseye" "${deb}" --republish
+            cloudsmith push deb "openhd/dev-release/debian/bullseye" "${deb}" --republish
           done
