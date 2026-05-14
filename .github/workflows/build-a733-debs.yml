@@ -1,13 +1,16 @@
 name: Build A733 kernel debs
 
+# Controls when the workflow will run
 on:
-  workflow_dispatch:
+  # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
-    branches:
-      - a733-120hz
-    paths:
-      - '.github/workflows/build-a733-debs.yml'
-      - 'openhd/**'
+    branches: [ "a733-120hz" ]
+  pull_request:
+    branches: [ "a733-120hz" ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
 
 jobs:
   build:
@@ -17,6 +20,14 @@ jobs:
       CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
 
     steps:
+      - name: Check Cloudsmith credentials
+        if: github.event_name != 'pull_request'
+        run: |
+          if [ -z "$CLOUDSMITH_API_KEY" ]; then
+            echo "::error::CLOUDSMITH_API_KEY repository secret is not configured or is unavailable to this workflow. Check that the OpenHD organization secret is allowed for OpenHD/allwinner-linux and that this is not a forked pull_request run."
+            exit 1
+          fi
+
       - name: Checkout kernel
         uses: actions/checkout@v4
         with:
@@ -60,14 +71,14 @@ jobs:
 
       - name: Push to Cloudsmith
         id: push
+        if: github.event_name != 'pull_request'
         uses: cloudsmith-io/action@master
         with:
-          api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
-          command: push
-          format: deb
-          owner: openhd
+          command: "push"
+          format: "deb"
+          owner: "openhd"
           repo: ${{ github.ref_name }}
-          distro: debian
-          release: bullseye
-          republish: true
-          file: artifacts/*.deb
+          distro: "debian"
+          release: "bullseye"
+          republish: "true"
+          file: "artifacts/*.deb"
