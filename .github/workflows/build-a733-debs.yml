@@ -69,16 +69,23 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Push to Cloudsmith
+      - name: Install Cloudsmith CLI
+        if: github.event_name != 'pull_request'
+        run: |
+          python3 -m pip install --upgrade cloudsmith-cli
+
+      - name: Push debs to Cloudsmith
         id: push
         if: github.event_name != 'pull_request'
-        uses: cloudsmith-io/action@master
-        with:
-          command: "push"
-          format: "deb"
-          owner: "openhd"
-          repo: ${{ github.ref_name }}
-          distro: "debian"
-          release: "bullseye"
-          republish: "true"
-          file: "artifacts/*.deb"
+        run: |
+          shopt -s nullglob
+          debs=(artifacts/*.deb)
+          if [ "${#debs[@]}" -eq 0 ]; then
+            echo "::error::No deb files found in artifacts/"
+            exit 1
+          fi
+
+          for deb in "${debs[@]}"; do
+            echo "Uploading ${deb}"
+            cloudsmith push deb "openhd/${GITHUB_REF_NAME}/debian/bullseye" "${deb}" --republish
+          done
