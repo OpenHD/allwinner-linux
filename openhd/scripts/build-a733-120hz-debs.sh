@@ -34,7 +34,11 @@ export LICHEE_KERN_DIR="$ROOT"
 export KCFLAGS="-I$ROOT/bsp/drivers/gmac -I$ROOT/bsp/drivers/usb/host -I$ROOT/bsp/drivers/sound/platform -I$ROOT/bsp/drivers/ve/cedar-ve"
 
 if [ ! -f .config ]; then
-  cp /boot/config-5.15.147-21-a733 .config
+  if [ -f openhd/configs/a733-5.15.147-21.config ]; then
+    cp openhd/configs/a733-5.15.147-21.config .config
+  else
+    cp /boot/config-5.15.147-21-a733 .config
+  fi
 fi
 
 make olddefconfig
