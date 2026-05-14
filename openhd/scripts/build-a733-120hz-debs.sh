@@ -15,7 +15,7 @@ fi
 rm -rf bsp
 cp -a "$BSP_SOURCE" bsp
 rm -rf bsp/.git
-patch -p0 -d bsp < openhd/patches/allwinner-bsp-hdmi-120hz.patch
+patch -p1 -d bsp < openhd/patches/allwinner-bsp-hdmi-120hz.patch
 
 cat > bsp/include/sunxi-autogen.h <<'HDR'
 /* Generated for standalone kernel package build. */
