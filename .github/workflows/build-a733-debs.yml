@@ -1,0 +1,84 @@
+name: Build A733 kernel debs
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the "main" branch
+  push:
+    branches: [ "a733-120hz" ]
+  pull_request:
+    branches: [ "a733-120hz" ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    env:
+      CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
+
+    steps:
+      - name: Check Cloudsmith credentials
+        if: github.event_name != 'pull_request'
+        run: |
+          if [ -z "$CLOUDSMITH_API_KEY" ]; then
+            echo "::error::CLOUDSMITH_API_KEY repository secret is not configured or is unavailable to this workflow. Check that the OpenHD organization secret is allowed for OpenHD/allwinner-linux and that this is not a forked pull_request run."
+            exit 1
+          fi
+
+      - name: Checkout kernel
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison build-essential cpio debhelper dpkg-dev fakeroot flex git kmod \
+            libelf-dev libssl-dev lz4 pahole rsync xz-utils zstd \
+            gcc-aarch64-linux-gnu
+
+      - name: Checkout Allwinner BSP
+        run: |
+          git clone --depth 1 -b cubie-aiot-v1.4.6 \
+            https://github.com/radxa/allwinner-bsp.git \
+            /tmp/allwinner-bsp
+
+      - name: Build Bullseye-compatible xz debs
+        env:
+          BSP_SOURCE: /tmp/allwinner-bsp
+          VERSION_SUFFIX: 120hz-ci.${{ github.run_number }}
+        run: |
+          ./openhd/scripts/build-a733-120hz-debs.sh
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts
+          cp ../repacked-xz/*.deb artifacts/
+          ar t artifacts/linux-image-5.15.147-21-a733_*_xz.deb
+          ls -lh artifacts
+
+      - name: Upload xz deb artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: a733-linux-120hz-xz-debs-${{ github.run_number }}
+          path: artifacts/*.deb
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Push to Cloudsmith
+        id: push
+        if: github.event_name != 'pull_request'
+        uses: cloudsmith-io/action@master
+        with:
+          command: "push"
+          format: "deb"
+          owner: "openhd"
+          repo: ${{ github.ref_name }}
+          distro: "debian"
+          release: "bullseye"
+          republish: "true"
+          file: "artifacts/*.deb"
