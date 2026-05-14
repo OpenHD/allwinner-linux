@@ -1,0 +1,78 @@
+diff --git a/drivers/drm/sunxi_device/hardware/lowlevel_hdmi20/dw_edid.c b/drivers/drm/sunxi_device/hardware/lowlevel_hdmi20/dw_edid.c
+index 04e4bdc0..92e9e92d 100644
+--- a/drivers/drm/sunxi_device/hardware/lowlevel_hdmi20/dw_edid.c
++++ b/drivers/drm/sunxi_device/hardware/lowlevel_hdmi20/dw_edid.c
+@@ -1205,12 +1205,22 @@ int dw_sink_support_max_tmdsclk(u32 clk)
+ {
+ 	struct sink_info_s   *sink = dw_get_sink();
+ 	u32 max_rate = 300;
++	u32 hdmi14_max_rate = 0;
+ 
+ 	if (IS_ERR_OR_NULL(sink)) {
+ 		shdmi_err(sink);
+ 		return -1;
+ 	}
+ 
++	/* HDMI VSDB Max TMDS Clock is stored in 5 MHz units. Some 120 Hz
++	 * panels advertise a 340 MHz limit there without an HDMI Forum VSDB.
++	 */
++	if (sink->edid_mHdmivsdb.mMaxTmdsClk)
++		hdmi14_max_rate = sink->edid_mHdmivsdb.mMaxTmdsClk * 5;
++
++	if (hdmi14_max_rate > max_rate)
++		max_rate = hdmi14_max_rate;
++
+ 	if (dw_sink_support_hdmi20()) {
+ 		if (sink->edid_mHdmiForumvsdb.mMaxTmdsCharRate)
+ 			max_rate = sink->edid_mHdmiForumvsdb.mMaxTmdsCharRate * 5;
+@@ -1221,8 +1231,9 @@ int dw_sink_support_max_tmdsclk(u32 clk)
+ 	if (max_rate > (clk / 1000))
+ 		return 0x1;
+ 
+-	hdmi_trace("dw edid check max rate: %d, use rate: %d, check rate: %d\n",
+-		sink->edid_mHdmiForumvsdb.mMaxTmdsCharRate, max_rate, clk / 1000);
++	hdmi_trace("dw edid check max rate: hdmi14 %d, forum %d, use rate: %d, check rate: %d\n",
++		hdmi14_max_rate, sink->edid_mHdmiForumvsdb.mMaxTmdsCharRate,
++		max_rate, clk / 1000);
+ 	return 0x0;
+ }
+ 
+diff --git a/drivers/drm/sunxi_drm_hdmi.c b/drivers/drm/sunxi_drm_hdmi.c
+index 4c09323d..6ee5f3fe 100644
+--- a/drivers/drm/sunxi_drm_hdmi.c
++++ b/drivers/drm/sunxi_drm_hdmi.c
+@@ -2652,6 +2652,7 @@ static enum drm_mode_status _sunxi_drm_hdmi_mode_valid(
+ 		struct drm_connector *connector, struct drm_display_mode *mode)
+ {
+ 	int rate = drm_mode_vrefresh(mode);
++	int ret = 0;
+ 
+ 	/* check low i-timing */
+ 	if ((mode->flags & DRM_MODE_FLAG_INTERLACE) && (mode->vdisplay < 1080)) {
+@@ -2660,11 +2661,24 @@ static enum drm_mode_status _sunxi_drm_hdmi_mode_valid(
+ 		return MODE_BAD;
+ 	}
+ 
+-	/* check frame rate support */
+-	if (rate > 60) {
++	/* The HDMI 2.0 controller and this panel can run 1080p/120 and
++	 * 1200p/120. Keep rejecting higher refresh rates, but do not drop
++	 * EDID-advertised 120 Hz modes before the TMDS clock check below.
++	 */
++	if (rate > 120) {
++		hdmi_trace("drm hdmi unsupport mode %dx%d@%dHz: refresh too high\n",
++				mode->hdisplay, mode->vdisplay, rate);
+ 		return MODE_BAD;
+ 	}
+ 
++	ret = sunxi_hdmi_video_check_tmds_clock(DISP_CSC_TYPE_RGB,
++			DISP_DATA_8BITS, (u32)mode->clock);
++	if (ret <= 0) {
++		hdmi_trace("drm hdmi unsupport mode %dx%d@%dHz: TMDS clock %dKHz too high\n",
++				mode->hdisplay, mode->vdisplay, rate, mode->clock);
++		return MODE_CLOCK_HIGH;
++	}
++
+ 	return MODE_OK;
+ }
+ 
