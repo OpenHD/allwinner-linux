@@ -58,7 +58,7 @@ jobs:
         run: |
           mkdir -p artifacts
           cp ../repacked-xz/*.deb artifacts/
-          ar t artifacts/linux-image-5.15.147-21-a733_*_xz.deb
+          ar t artifacts/linux-image-5.15.147-21-a733*_xz.deb
           ls -lh artifacts
 
       - name: Upload xz deb artifacts

@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BSP_SOURCE="${BSP_SOURCE:-/opt/allwinner/allwinner-bsp}"
 VERSION_SUFFIX="${VERSION_SUFFIX:-120hz1}"
+KERNEL_LOCALVERSION="${KERNEL_LOCALVERSION:--21-a733-120hz}"
 
 cd "$ROOT"
 
@@ -41,12 +42,14 @@ if [ ! -f .config ]; then
   fi
 fi
 
-make olddefconfig
-make prepare scripts
+make LOCALVERSION="$KERNEL_LOCALVERSION" olddefconfig
+make LOCALVERSION="$KERNEL_LOCALVERSION" prepare scripts
 make -j"$(nproc)" \
-  LOCALVERSION=-21-a733 \
+  LOCALVERSION="$KERNEL_LOCALVERSION" \
   KDEB_PKGVERSION="5.15.147-21.${VERSION_SUFFIX}" \
   bindeb-pkg
+
+kernel_release="$(make -s LOCALVERSION="$KERNEL_LOCALVERSION" kernelrelease)"
 
 mkdir -p ../repacked-xz
 for deb in ../linux-*"5.15.147-21.${VERSION_SUFFIX}"*.deb; do
@@ -54,6 +57,22 @@ for deb in ../linux-*"5.15.147-21.${VERSION_SUFFIX}"*.deb; do
   name="$(basename "$deb" .deb)"
   work="$(mktemp -d)"
   dpkg-deb -R "$deb" "$work/pkg"
+
+  if [ -f "$work/pkg/boot/vmlinuz-$kernel_release" ]; then
+    install -m 0644 arch/arm64/boot/Image "$work/pkg/boot/vmlinuz-$kernel_release"
+
+    dtb_dest="$work/pkg/usr/lib/linux-image-$kernel_release/allwinner"
+    mkdir -p "$dtb_dest"
+    install -m 0755 openhd/dtbs/allwinner/sun60i-a733-cubie-a7a.dtb "$dtb_dest/"
+    install -m 0755 openhd/dtbs/allwinner/sun60i-a733-cubie-a7s.dtb "$dtb_dest/"
+    install -m 0755 openhd/dtbs/allwinner/sun60i-a733-cubie-a7z.dtb "$dtb_dest/"
+  fi
+
+  (
+    cd "$work/pkg"
+    find . -type f ! -path './DEBIAN/*' -printf '%P\0' | sort -z | xargs -0 md5sum > DEBIAN/md5sums
+  )
+
   dpkg-deb -Zxz -z6 -b "$work/pkg" "../repacked-xz/${name}_xz.deb"
   rm -rf "$work"
 done

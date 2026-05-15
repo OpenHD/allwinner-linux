@@ -19,6 +19,9 @@ The script:
 - applies the HDMI 120 Hz BSP patch
 - generates the minimal standalone BSP header expected by the vendor build
 - exports the BSP variables needed by direct `bindeb-pkg` builds
+- builds a separate `5.15.147-21-a733-120hz` kernel ABI so the stock kernel is not overwritten
+- replaces the packaged `/boot/vmlinuz-*` with the raw ARM64 `Image` expected by the A733 U-Boot setup
+- injects the stock `sun60i-a733-cubie-a7*.dtb` files required by the Cubie A7 boards
 - repacks generated Debian packages with `xz` compression for Debian Bullseye `dpkg`
 
-Install the resulting image package from `../repacked-xz/` on the A733 device with `dpkg -i`, then run `u-boot-update` and reboot.
+Install the resulting image package from `../repacked-xz/` on the A733 device with `dpkg -i`, verify `/boot/extlinux/extlinux.conf` contains both the stock and `-120hz` entries, then reboot.
