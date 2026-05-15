@@ -16,7 +16,18 @@ fi
 rm -rf bsp
 cp -a "$BSP_SOURCE" bsp
 rm -rf bsp/.git
-patch -p1 -d bsp < openhd/patches/allwinner-bsp-hdmi-120hz.patch
+
+if patch --dry-run -p1 -d bsp < openhd/patches/allwinner-bsp-hdmi-120hz.patch >/dev/null; then
+  patch -p1 -d bsp < openhd/patches/allwinner-bsp-hdmi-120hz.patch
+else
+  if grep -q 'mode->clock)' bsp/drivers/drm/sunxi_drm_hdmi.c &&
+     grep -q 'mMaxTmdsClk' bsp/drivers/drm/sunxi_device/hardware/lowlevel_hdmi20/dw_edid.c; then
+    echo "HDMI 120 Hz BSP patch already appears to be applied."
+  else
+    echo "HDMI 120 Hz BSP patch does not apply cleanly and expected patched markers are missing." >&2
+    exit 1
+  fi
+fi
 
 cat > bsp/include/sunxi-autogen.h <<'HDR'
 /* Generated for standalone kernel package build. */
